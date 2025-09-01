@@ -29,7 +29,7 @@ import os
 import re
 import sys
 from datetime import datetime
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 
 # Desired targets
 TARGET_ATTRS = [
@@ -99,8 +99,8 @@ def ensure_attributes_in_block(lines: List[str], start: int, end: int, enforce: 
             break
 
     exists_exact = {a: False for a, _ in TARGET_ATTRS}
-    commented_idx = {a: None for a, _ in TARGET_ATTRS}
-    other_value_idx = {a: None for a, _ in TARGET_ATTRS}
+    commented_idx = {a: None for a, _ in TARGET_ATTRS}           # type: ignore[assignment]
+    other_value_idx = {a: None for a, _ in TARGET_ATTRS}         # type: ignore[assignment]
     values = {a: v for a, v in TARGET_ATTRS}
 
     # Scan current block
@@ -132,7 +132,7 @@ def ensure_attributes_in_block(lines: List[str], start: int, end: int, enforce: 
             continue
 
         if other_value_idx[attr] is not None and enforce:
-            i = other_value_idx[attr]
+            i = other_value_idx[attr]  # type: ignore[index]
             indent = re.match(r'^(\s*)', lines[i]).group(1) or inner_indent
             new_line = f"{indent}{target_line}"
             if lines[i] != new_line:
@@ -143,7 +143,7 @@ def ensure_attributes_in_block(lines: List[str], start: int, end: int, enforce: 
             continue
 
         if commented_idx[attr] is not None:
-            i = commented_idx[attr]
+            i = commented_idx[attr]  # type: ignore[index]
             indent = re.match(r'^(\s*)', lines[i]).group(1) or inner_indent
             new_line = f"{indent}{target_line}"
             if lines[i] != new_line:
@@ -161,8 +161,8 @@ def ensure_attributes_in_block(lines: List[str], start: int, end: int, enforce: 
         msgs.append(f"Appended '{attr}' in resource block (before line {end+1}).")
         end += 1  # block end shifts by one
 
-    # Final pass: keep each pair adjacent (remove blanks between them; do NOT reorder across non-blank/non-comment)
-    def idx_of_attr(attr: str) -> int | None:
+    # Final pass: keep each pair adjacent (remove blanks between them; do NOT cross non-comment content)
+    def idx_of_attr(attr: str) -> Optional[int]:
         pat = build_any_value_uncommented_re(attr)
         for i in range(start + 1, end):
             if pat.match(lines[i]):
@@ -181,14 +181,13 @@ def ensure_attributes_in_block(lines: List[str], start: int, end: int, enforce: 
         i2 = idx_of_attr(a2)
         if i1 is None or i2 is None or i2 <= i1:
             continue
+
         # Remove blank-only lines between the two
         j = i1 + 1
-        removed = 0
         while j < i2:
             if lines[j].strip() == "":
                 del lines[j]
                 modified = True
-                removed += 1
                 i2 -= 1
             else:
                 j += 1
