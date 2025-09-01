@@ -1,0 +1,83 @@
+- step:
+    type: ShellScript
+    name: Clone-Patch-Push (VPN startup_action)
+    identifier: ClonePatchPush
+    spec:
+      shell: Bash
+      environmentVariables:
+        - name: GIT_USER
+          type: String
+          value: abhinsingh993-byte
+        - name: GIT_EMAIL
+          type: String
+          value: abhin.singh993@gmail.com
+        - name: GIT_PAT
+          type: Secret
+          value: token-git
+        - name: GIT_URL
+          type: String
+          value: https://github.com/abhinsingh993-byte/abhin-project.git
+        - name: GIT_BRANCH
+          type: String
+          value: main
+        - name: REPO_DIR
+          type: String
+          value: ./aws-harness-lab
+        - name: TARGET_FILE
+          type: String
+          value: aws-harness-lab/vpn_gateway.tf   # <— updated
+        - name: PY_SCRIPT
+          type: String
+          value: aws-harness-lab/patch_tf.py
+      source:
+        type: Inline
+        spec:
+          script: |
+            set -euo pipefail
+
+            echo "==> Ensure Git and Python are available"
+            if ! command -v git >/dev/null 2>&1; then
+              echo "ERROR: git not found on delegate host."
+              exit 1
+            fi
+            if ! command -v python3 >/dev/null 2>&1; then
+              echo "Python3 not found. Attempting to install..."
+              if command -v apk >/dev/null 2>&1; then apk add --no-cache python3 py3-pip;
+              elif command -v apt-get >/dev/null 2>&1; then apt-get update && apt-get install -y python3 python3-pip;
+              elif command -v yum >/dev/null 2>&1; then yum install -y python3;
+              else echo "Please preinstall Python3 on the delegate"; exit 1; fi
+            fi
+
+            echo "==> Clone repo"
+            rm -rf "$REPO_DIR"
+            mkdir -p "$REPO_DIR"
+            AUTH_URL="$(echo "$GIT_URL" | sed "s#https://#https://${GIT_USER}:${GIT_PAT}@#")"
+            git clone --branch "$GIT_BRANCH" "$AUTH_URL" "$REPO_DIR"
+            cd "$REPO_DIR"
+
+            echo "==> Run patch script from repo"
+            if [ ! -f "$PY_SCRIPT" ]; then
+              echo "ERROR: Patch script not found at $PY_SCRIPT"
+              exit 1
+            fi
+
+            # Preview (optional):
+            # python3 "$PY_SCRIPT" --file "$TARGET_FILE" --dry-run
+
+            # Apply:
+            python3 "$PY_SCRIPT" --file "$TARGET_FILE" --enforce-start
+
+            echo "==> Commit & push if any changes"
+            git config user.name  "$GIT_USER"
+            git config user.email "$GIT_EMAIL"
+            git add -A
+            if ! git diff --cached --quiet; then
+              git commit -m 'ci: ensure tunnel*_startup_action="start" in aws_vpn_connection'
+              git push origin "$GIT_BRANCH"
+              echo "Changes pushed."
+            else
+              echo "No changes to commit."
+            fi
+      executionTarget: {}
+      outputVariables: []
+      timeout: 10m

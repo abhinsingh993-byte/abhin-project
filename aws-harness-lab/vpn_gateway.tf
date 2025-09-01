@@ -35,8 +35,4 @@ resource "aws_vpn_connection" "vpn_conn-1" {
   tunnel1_startup_action = "start"
 
   tunnel2_startup_action = "start"
-
-
-  # tunnel1_enable_tunnel_lifecycle_control = true
-  # tunnel2_enable_tunnel_lifecycle_control = true
 }
